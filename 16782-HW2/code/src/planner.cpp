@@ -351,6 +351,75 @@ void planner(
 //                                                                                                                   //
 //*******************************************************************************************************************//
 
+/* Each node of the tree:
+		* joint_angles: joint configuration of the arm 
+		* parent: pointer to node's parent in tree
+*/
+struct Node{
+	vector<double> joint_angles;
+	Node* parent;
+
+	Node(vector<double> joint_angles):
+		joint_angles(joint_angles),
+		parent(nullptr)
+	{};
+};
+
+
+class RRTAlgo{
+	public:
+		/* tree from start node */
+		vector<Node*> start_tree;
+
+		/* tree from goal node */
+		vector<Node*> goal_tree;
+
+		vector<double> start; // start configuration
+		vector<double> goal; // goal configuration
+		int K; // numofIterations
+		int epsilon; //step size
+		double *map;
+
+		RRTAlgo(vector<double> start, vector<double> goal, int K, int epsilon, double* map):
+			start(start),
+			goal(goal),
+			K(K),
+			epsilon(epsilon),
+			map(map)
+		{};
+
+		/* Class Functions: */
+
+		// addChild 
+		// sampleAPoint
+		// steerToPoint
+		// isInObstacle
+		// findNearestNode
+		// euclideanDistance
+		// goalFound
+		// resetNearestValues
+
+		/* RRT */
+		// buildRRT
+		Node* buildRRT(int K);
+		// retraceRRTPath
+		// extendRRT
+
+		/* RRT Connect */
+
+		/* RRT Star */
+};
+
+
+/*
+	inputs: K - number of iterations that RRT should run for
+	outputs: tree (of type??)
+*/
+Node* RRTAlgo::buildRRT(int K){
+	
+}
+
+
 static void plannerRRT(
     double *map,
     int x_size,
@@ -362,7 +431,42 @@ static void plannerRRT(
     int *planlength)
 {
     /* TODO: Replace with your implementation */
-    planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+
+	*plan = NULL;
+	*planlength = 0;
+	
+	// defining start & goal configuration of the arm
+	vector<double> start; start.assign(armstart_anglesV_rad, armstart_anglesV_rad + numofDOFs);
+	vector<double> goal; goal.assign(armgoal_anglesV_rad, armgoal_anglesV_rad + numofDOFs);
+
+	int numOfIterations = 1000;
+	int epsilon = 0.5;
+
+	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map);
+	
+    // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+
+	// TODO: Need to modify this
+	int K = 0;
+
+	for(int k=1; k<K; k++){
+		/*
+			Initialize with a random configuration
+		*/
+		/*
+			Call EXTEND:
+				inputs: "T" - current growing tree, "q_rand" = random point that is sampled
+		*/
+	}
+
+	/*
+		EXTEND:
+			q_near = nearest(q_rand, Tree) # find the nearest point on the tree to q_rand
+			if 
+	*/
+
+	// return the tree
+
 }
 
 //*******************************************************************************************************************//
