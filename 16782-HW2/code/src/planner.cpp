@@ -16,6 +16,7 @@
 #include <iostream> // cout, endl
 #include <fstream> // For reading/writing files
 #include <assert.h> 
+#include <limits>
 
 /* Input Arguments */
 #define	MAP_IN      prhs[0]
@@ -66,6 +67,8 @@ using std::make_tuple;
 using std::tie;
 using std::cout;
 using std::endl;
+
+using namespace std;
 
 //*******************************************************************************************************************//
 //                                                                                                                   //
@@ -379,18 +382,20 @@ class RRTAlgo{
 		int K; // numofIterations
 		int epsilon; //step size
 		double *map;
+		int numofDOFs;
 
-		RRTAlgo(vector<double> start, vector<double> goal, int K, int epsilon, double* map):
+		RRTAlgo(vector<double> start, vector<double> goal, int K, int epsilon, double* map, int numofDOFs):
 			start(start),
 			goal(goal),
 			K(K),
 			epsilon(epsilon),
-			map(map)
+			map(map),
+			numofDOFs(numofDOFs)
 		{};
 
 		/* Class Functions: */
-
-		// addChild 
+		void addChild(vector<double>& new_joint_angles);
+		Node* findNearestNeighbour(vector<double> q);
 		// sampleAPoint
 		// steerToPoint
 		// isInObstacle
@@ -402,8 +407,8 @@ class RRTAlgo{
 		/* RRT */
 		// buildRRT
 		Node* buildRRT(int K);
+		vector<double> extendRRT(vector<double> q);
 		// retraceRRTPath
-		// extendRRT
 
 		/* RRT Connect */
 
@@ -411,12 +416,53 @@ class RRTAlgo{
 };
 
 
+void RRTAlgo::addChild(vector<double>& new_joint_angles){
+	Node* new_node = new Node(new_joint_angles);
+
+	// add the node to the start tree
+	start_tree.push_back(new_node);
+}
+
+Node* RRTAlgo::findNearestNeighbour(vector<double> q){
+	Node* nearest = nullptr;
+	// init: set the minimum distance to a very high value
+	double minDist = numeric_limits<double>::max();
+	double dist = 0;
+
+	// iterate through the tree 
+	for(Node* n : start_tree){
+
+	}
+
+
+}
+
+vector<double> RRTAlgo::extendRRT(vector<double> q){
+	Node* qNear = findNearestNeighbour(q);
+
+}
+
 /*
 	inputs: K - number of iterations that RRT should run for
 	outputs: tree (of type??)
 */
 Node* RRTAlgo::buildRRT(int K){
-	
+	vector<double> qInit = start;
+	vector<double> qGoal = goal;
+
+	for(int k=0; k<K; k++){
+		vector<double> qRand;
+		
+		// Generate random configuration between 0 and 2*pi
+		for(int i=0; i<numofDOFs; i++)
+			qRand[i] = ((double) rand() / (RAND_MAX + 1.0)) * M_PI * 2;
+		
+		// TODO: call extendRRT
+		auto node = extendRRT(qRand);
+
+	}
+
+
 }
 
 
@@ -442,14 +488,11 @@ static void plannerRRT(
 	int numOfIterations = 1000;
 	int epsilon = 0.5;
 
-	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map);
+	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs);
 	
     // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
 
-	// TODO: Need to modify this
-	int K = 0;
-
-	for(int k=1; k<K; k++){
+	// for(int k=1; k<K; k++){
 		/*
 			Initialize with a random configuration
 		*/
@@ -457,7 +500,7 @@ static void plannerRRT(
 			Call EXTEND:
 				inputs: "T" - current growing tree, "q_rand" = random point that is sampled
 		*/
-	}
+	// }
 
 	/*
 		EXTEND:
