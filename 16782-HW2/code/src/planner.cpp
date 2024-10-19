@@ -383,31 +383,35 @@ class RRTAlgo{
 		int epsilon; //step size
 		double *map;
 		int numofDOFs;
+		int x_size;
+    	int y_size;
 
-		RRTAlgo(vector<double> start, vector<double> goal, int K, int epsilon, double* map, int numofDOFs):
+		RRTAlgo(vector<double> start, vector<double> goal, int K, int epsilon, double* map, int numofDOFs, int x_size, int y_size):
 			start(start),
 			goal(goal),
 			K(K),
 			epsilon(epsilon),
 			map(map),
-			numofDOFs(numofDOFs)
+			numofDOFs(numofDOFs),
+			x_size(x_size),
+			y_size(y_size)
 		{};
 
 		/* Class Functions: */
 		void addChild(vector<double>& new_joint_angles);
-		Node* findNearestNeighbour(vector<double> q);
+		void addEdge(Node* parent, Node* child);
+		Node* findNearestNode(vector<double>& qRand);
+		double euclideanDistance(vector<double> node, vector<double> q);
+		bool newConfig(vector<double>& qRand, vector<double>& qNear, vector<double>& qNew);
 		// sampleAPoint
 		// steerToPoint
 		// isInObstacle
-		// findNearestNode
-		// euclideanDistance
 		// goalFound
-		// resetNearestValues
 
 		/* RRT */
 		// buildRRT
 		Node* buildRRT(int K);
-		vector<double> extendRRT(vector<double> q);
+		pair<bool, Node*> extendRRT(vector<double>& qRand);
 		// retraceRRTPath
 
 		/* RRT Connect */
@@ -423,7 +427,21 @@ void RRTAlgo::addChild(vector<double>& new_joint_angles){
 	start_tree.push_back(new_node);
 }
 
-Node* RRTAlgo::findNearestNeighbour(vector<double> q){
+void RRTAlgo::addEdge(Node* parent, Node* child){
+	child->parent = parent;
+}
+
+double RRTAlgo::euclideanDistance(vector<double> node, vector<double> q){
+	double distance = 0.0;
+	
+	for(size_t i = 0; i<numofDOFs; i++){
+		distance += pow(node[i] - q[i], 2);
+	}
+
+	return sqrt(distance);
+}
+
+Node* RRTAlgo::findNearestNode(vector<double>& qRand){
 	Node* nearest = nullptr;
 	// init: set the minimum distance to a very high value
 	double minDist = numeric_limits<double>::max();
@@ -431,14 +449,94 @@ Node* RRTAlgo::findNearestNeighbour(vector<double> q){
 
 	// iterate through the tree 
 	for(Node* n : start_tree){
+		double dist = euclideanDistance(n->joint_angles, qRand);
+		
+		// set the new minimum distance and nearest node
+		if (dist < minDist){
+			minDist = dist;
+			nearest = n;
+		}
+	}
+
+	return nearest;
+}
+
+bool RRTAlgo::newConfig(vector<double>& qRand, vector<double>& qNear, vector<double>& qNew){
+	/* Return the status of 
+			true: ADVANCED, REACHED; 
+			false: TRAPPED
+	*/
+	bool status;
+	double temp_joint_angles[numofDOFs];
+	double dist = euclideanDistance(qNear, qRand);
+
+	// Scaling factor: helps control how far to move towards the target configuration
+	double stepSize = MIN(epsilon, dist)/dist;
+
+	// Interpolate towards qNear; delta steps
+	for (double delta = stepSize; delta <= 1.0; delta+=stepSize){
+		/*
+			scales the difference between the target and current configuration by alpha
+		*/
+		for(size_t i=0; i<numofDOFs; i++){
+			temp_joint_angles[i] = qNear[i] + delta*(qRand[i] - qNear[i]);
+		}
+
+		// update qNew & keep going; ADVANCED or REACHED
+		if(IsValidArmConfiguration(temp_joint_angles, numofDOFs, map, x_size, y_size)){
+			// copy the temporary configuration to qNew
+			copy(&temp_joint_angles[0], &temp_joint_angles[numofDOFs], qNew);
+			status = true;
+		}
+		// stop if we hit a collision; TRAPPED
+		else{
+			status = false;
+			break;
+		}
+
+		/* 
+			TODO: check - obsolete?? we're gonna return qNew regardless of reached or advanced
+			this can be in the main planner?
+		*/ 
+		// // check for distance b/w qNew & qRand; REACHED
+		// if(status){
+		// 	double finalDist = euclideanDistance(qNew, qRand);
+
+		// 	if (finalDist <= epsilon)
+		// 		return true;
+		// }
 
 	}
 
-
+	return true;
 }
 
-vector<double> RRTAlgo::extendRRT(vector<double> q){
-	Node* qNear = findNearestNeighbour(q);
+pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand){
+	Node* qNear = findNearestNode(qRand); //find the nearest node on the tree
+	vector<double> qNew(numofDOFs, 0);
+
+	// ADVANCED or REACHED; handled in newConfig
+	if(newConfig(qRand, qNear->joint_angles, qNew)){
+		addChild(qNew);
+		Node* qNewNode = start_tree.back();
+		addEdge(qNear, qNewNode);
+		return make_pair(true, qNewNode);
+	}
+	else{
+		return make_pair(false, qNear);
+	}
+
+	/*
+		Algorithm
+	*/
+	// if q_new is a new config -> if new_config(q, qNear, qNew)
+		// add qNew vertex to the tree 
+		// add edge between qNear and qNew
+		// if qNew = q
+			// return REACHED
+		// else
+			// return ADVANCED
+	// return TRAPPED
 
 }
 
@@ -488,7 +586,7 @@ static void plannerRRT(
 	int numOfIterations = 1000;
 	int epsilon = 0.5;
 
-	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs);
+	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs, x_size, y_size);
 	
     // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
 
