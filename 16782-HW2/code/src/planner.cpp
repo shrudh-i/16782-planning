@@ -409,10 +409,9 @@ class RRTAlgo{
 		// goalFound
 
 		/* RRT */
-		// buildRRT
 		Node* buildRRT(int K);
 		pair<bool, Node*> extendRRT(vector<double>& qRand);
-		// retraceRRTPath
+		void retraceRRTPath(Node* result, double ***plan, int *planlength);
 
 		/* RRT Connect */
 
@@ -525,19 +524,6 @@ pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand){
 	else{
 		return make_pair(false, qNear);
 	}
-
-	/*
-		Algorithm
-	*/
-	// if q_new is a new config -> if new_config(q, qNear, qNew)
-		// add qNew vertex to the tree 
-		// add edge between qNear and qNew
-		// if qNew = q
-			// return REACHED
-		// else
-			// return ADVANCED
-	// return TRAPPED
-
 }
 
 /*
@@ -556,13 +542,67 @@ Node* RRTAlgo::buildRRT(int K){
 			qRand[i] = ((double) rand() / (RAND_MAX + 1.0)) * M_PI * 2;
 		
 		// TODO: call extendRRT
-		auto node = extendRRT(qRand);
+		auto result = extendRRT(qRand).second;
+
+		if(euclideanDistance(result->joint_angles, qGoal) <= 1e-3){
+			return result;
+		}
 
 	}
-
-
+	// could not find a path
+	return nullptr;
 }
 
+void RRTAlgo::retraceRRTPath(Node* result, double ***plan, int *planlength){
+
+	// find path length by backtracking from the goal
+    int len = 0;
+    Node* current = result;
+    while (current != nullptr) {
+        len++;
+        current = current->parent;
+    }
+
+	// extract the path
+	current = result;
+	*plan = (double**) malloc(len*sizeof(double));
+	if (*plan == nullptr) {
+        *planlength = 0;
+        return; // Handle allocation failure
+    }
+
+	// for (int i = len-1; i >= 0; i--){
+    //     (*plan)[i] = (double*) malloc(numofDOFs*sizeof(double)); 
+    //     for(int j = 0; j < numofDOFs; j++){
+    //         (*plan)[i][j] = current->config.values[j];
+    //     }
+    //     current = current->parent;
+    // }
+    // *planlength = len;
+
+	for (int i = len - 1; i >= 0; i--) {
+        (*plan)[i] = (double*) malloc(numofDOFs * sizeof(double));
+		
+		// Handle allocation failure; free previously allocated memory
+        if ((*plan)[i] == nullptr) {
+            for (int k = len - 1; k > i; k--) {
+                free((*plan)[k]);
+            }
+            free(*plan);
+            *planlength = 0;
+            return;
+        }
+        
+		// Copy values manually
+        for (int j = 0; j < numofDOFs; j++) {
+            (*plan)[i][j] = current->joint_angles[j];
+        }
+        current = current->parent;
+    }
+
+    *planlength = len;
+
+}
 
 static void plannerRRT(
     double *map,
@@ -587,6 +627,21 @@ static void plannerRRT(
 	int epsilon = 0.5;
 
 	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs, x_size, y_size);
+
+	// start RRT!!
+	Node* result = rrt.buildRRT(100000);
+
+	// retrace & extract path
+	if(result){
+		rrt.retraceRRTPath(result, plan, planlength);
+	}
+	else{
+		cout<<"No path found!"<<endl;
+	}
+
+	cout << "Path Length: " << *planlength << endl;
+
+    return;
 	
     // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
 
