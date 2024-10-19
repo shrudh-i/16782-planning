@@ -526,8 +526,8 @@ Node* RRTAlgo::buildRRT(){
 
 		double biasProbability = static_cast<double>(rand()) / RAND_MAX; // random value between 0 and 1
 
-        // 5% bias towards the goal - CAN BE TUNED
-        if (biasProbability <= 0.05) {
+        // 10% bias towards the goal - CAN BE TUNED
+        if (biasProbability <= 0.1) {
 			// cout<<"i'm biased"<<endl;
             qRand = qGoal;
         } else {
@@ -538,7 +538,7 @@ Node* RRTAlgo::buildRRT(){
 		}
 		
 		auto result = extendRRT(qRand).second;
-		if(euclideanDistance(result->joint_angles, qGoal) <= 1e-3){
+		if(euclideanDistance(result->joint_angles, qGoal) <= 1e-2){
 			// cout<<"found a solution"<<endl;
 			return result;
 		}
