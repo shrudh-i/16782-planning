@@ -380,13 +380,13 @@ class RRTAlgo{
 		vector<double> start; // start configuration
 		vector<double> goal; // goal configuration
 		int K; // numofIterations
-		int epsilon; //step size
+		double epsilon; //step size
 		double *map;
 		int numofDOFs;
 		int x_size;
     	int y_size;
 
-		RRTAlgo(vector<double> start, vector<double> goal, int K, int epsilon, double* map, int numofDOFs, int x_size, int y_size):
+		RRTAlgo(vector<double> start, vector<double> goal, int K, double epsilon, double* map, int numofDOFs, int x_size, int y_size):
 			start(start),
 			goal(goal),
 			K(K),
@@ -395,7 +395,7 @@ class RRTAlgo{
 			numofDOFs(numofDOFs),
 			x_size(x_size),
 			y_size(y_size)
-		{};
+		{}
 
 		/* Class Functions: */
 		void addChild(vector<double>& new_joint_angles);
@@ -403,13 +403,9 @@ class RRTAlgo{
 		Node* findNearestNode(vector<double>& qRand);
 		double euclideanDistance(vector<double> node, vector<double> q);
 		bool newConfig(vector<double>& qRand, vector<double>& qNear, vector<double>& qNew);
-		// sampleAPoint
-		// steerToPoint
-		// isInObstacle
-		// goalFound
 
 		/* RRT */
-		Node* buildRRT(int K);
+		Node* buildRRT();
 		pair<bool, Node*> extendRRT(vector<double>& qRand);
 		void retraceRRTPath(Node* result, double ***plan, int *planlength);
 
@@ -444,10 +440,10 @@ Node* RRTAlgo::findNearestNode(vector<double>& qRand){
 	Node* nearest = nullptr;
 	// init: set the minimum distance to a very high value
 	double minDist = numeric_limits<double>::max();
-	double dist = 0;
 
 	// iterate through the tree 
 	for(Node* n : start_tree){
+		// double dist = 0;
 		double dist = euclideanDistance(n->joint_angles, qRand);
 		
 		// set the new minimum distance and nearest node
@@ -484,7 +480,7 @@ bool RRTAlgo::newConfig(vector<double>& qRand, vector<double>& qNear, vector<dou
 		// update qNew & keep going; ADVANCED or REACHED
 		if(IsValidArmConfiguration(temp_joint_angles, numofDOFs, map, x_size, y_size)){
 			// copy the temporary configuration to qNew
-			copy(&temp_joint_angles[0], &temp_joint_angles[numofDOFs], qNew);
+			copy(temp_joint_angles, temp_joint_angles + numofDOFs, qNew.begin());
 			status = true;
 		}
 		// stop if we hit a collision; TRAPPED
@@ -492,22 +488,9 @@ bool RRTAlgo::newConfig(vector<double>& qRand, vector<double>& qNear, vector<dou
 			status = false;
 			break;
 		}
-
-		/* 
-			TODO: check - obsolete?? we're gonna return qNew regardless of reached or advanced
-			this can be in the main planner?
-		*/ 
-		// // check for distance b/w qNew & qRand; REACHED
-		// if(status){
-		// 	double finalDist = euclideanDistance(qNew, qRand);
-
-		// 	if (finalDist <= epsilon)
-		// 		return true;
-		// }
-
 	}
 
-	return true;
+	return status;
 }
 
 pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand){
@@ -521,6 +504,7 @@ pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand){
 		addEdge(qNear, qNewNode);
 		return make_pair(true, qNewNode);
 	}
+	// TRAPPED; handled in newConfig
 	else{
 		return make_pair(false, qNear);
 	}
@@ -528,27 +512,38 @@ pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand){
 
 /*
 	inputs: K - number of iterations that RRT should run for
-	outputs: tree (of type??)
+	outputs: final tree node
 */
-Node* RRTAlgo::buildRRT(int K){
+Node* RRTAlgo::buildRRT(){
 	vector<double> qInit = start;
 	vector<double> qGoal = goal;
 
-	for(int k=0; k<K; k++){
-		vector<double> qRand;
-		
-		// Generate random configuration between 0 and 2*pi
-		for(int i=0; i<numofDOFs; i++)
-			qRand[i] = ((double) rand() / (RAND_MAX + 1.0)) * M_PI * 2;
-		
-		// TODO: call extendRRT
-		auto result = extendRRT(qRand).second;
+	addChild(qInit);
 
+	for(int k=0; k<K; k++){
+		
+		vector<double> qRand(numofDOFs, 0);
+
+		double biasProbability = static_cast<double>(rand()) / RAND_MAX; // random value between 0 and 1
+
+        // 5% bias towards the goal - CAN BE TUNED
+        if (biasProbability <= 0.05) {
+			// cout<<"i'm biased"<<endl;
+            qRand = qGoal;
+        } else {
+			// Generate random configuration between 0 and 2*pi
+			for(int i=0; i<numofDOFs; i++){
+				qRand[i] = ((double) rand() / (RAND_MAX + 1.0)) * M_PI * 2;
+			}
+		}
+		
+		auto result = extendRRT(qRand).second;
 		if(euclideanDistance(result->joint_angles, qGoal) <= 1e-3){
+			// cout<<"found a solution"<<endl;
 			return result;
 		}
-
 	}
+
 	// could not find a path
 	return nullptr;
 }
@@ -570,15 +565,6 @@ void RRTAlgo::retraceRRTPath(Node* result, double ***plan, int *planlength){
         *planlength = 0;
         return; // Handle allocation failure
     }
-
-	// for (int i = len-1; i >= 0; i--){
-    //     (*plan)[i] = (double*) malloc(numofDOFs*sizeof(double)); 
-    //     for(int j = 0; j < numofDOFs; j++){
-    //         (*plan)[i][j] = current->config.values[j];
-    //     }
-    //     current = current->parent;
-    // }
-    // *planlength = len;
 
 	for (int i = len - 1; i >= 0; i--) {
         (*plan)[i] = (double*) malloc(numofDOFs * sizeof(double));
@@ -615,21 +601,20 @@ static void plannerRRT(
     int *planlength)
 {
     /* TODO: Replace with your implementation */
-
-	*plan = NULL;
-	*planlength = 0;
+	// planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
 	
 	// defining start & goal configuration of the arm
 	vector<double> start; start.assign(armstart_anglesV_rad, armstart_anglesV_rad + numofDOFs);
 	vector<double> goal; goal.assign(armgoal_anglesV_rad, armgoal_anglesV_rad + numofDOFs);
 
-	int numOfIterations = 1000;
-	int epsilon = 0.5;
+
+	int numOfIterations = 10000;
+	double epsilon = 0.5;
 
 	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs, x_size, y_size);
 
 	// start RRT!!
-	Node* result = rrt.buildRRT(100000);
+	Node* result = rrt.buildRRT();
 
 	// retrace & extract path
 	if(result){
@@ -642,27 +627,6 @@ static void plannerRRT(
 	cout << "Path Length: " << *planlength << endl;
 
     return;
-	
-    // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
-
-	// for(int k=1; k<K; k++){
-		/*
-			Initialize with a random configuration
-		*/
-		/*
-			Call EXTEND:
-				inputs: "T" - current growing tree, "q_rand" = random point that is sampled
-		*/
-	// }
-
-	/*
-		EXTEND:
-			q_near = nearest(q_rand, Tree) # find the nearest point on the tree to q_rand
-			if 
-	*/
-
-	// return the tree
-
 }
 
 //*******************************************************************************************************************//
