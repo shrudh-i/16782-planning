@@ -81,7 +81,10 @@ using namespace std;
 /// @return map, x_size, y_size
 tuple<double*, int, int> loadMap(string filepath) {
 	std::FILE *f = fopen(filepath.c_str(), "r");
+	cout<<"this is the file path:"<<filepath<<endl;
+	cout<<"file?"<<f<<endl;
 	if (f) {
+		cout<<"hi"<<endl;
 	}
 	else {
 		printf("Opening file failed! \n");
@@ -398,28 +401,33 @@ class RRTAlgo{
 		{}
 
 		/* Class Functions: */
-		void addChild(vector<double>& new_joint_angles);
+		void addChild(vector<double>& new_joint_angles, bool at_start=true);
 		void addEdge(Node* parent, Node* child);
-		Node* findNearestNode(vector<double>& qRand);
+		Node* findNearestNode(vector<double>& qRand, bool at_start=true);
 		double euclideanDistance(vector<double> node, vector<double> q);
 		bool newConfig(vector<double>& qRand, vector<double>& qNear, vector<double>& qNew);
 
 		/* RRT */
 		Node* buildRRT();
-		pair<bool, Node*> extendRRT(vector<double>& qRand);
+		pair<bool, Node*> extendRRT(vector<double>& qRand, bool at_start=true);
 		void retraceRRTPath(Node* result, double ***plan, int *planlength);
 
 		/* RRT Connect */
+		Node* buildRRTConnect();
+		void retraceRRTConnectPath();
+		Node* connect();
+
 
 		/* RRT Star */
 };
 
 
-void RRTAlgo::addChild(vector<double>& new_joint_angles){
+void RRTAlgo::addChild(vector<double>& new_joint_angles, bool at_start){
+	vector<Node*> tree = at_start ? start_tree : goal_tree;
 	Node* new_node = new Node(new_joint_angles);
 
 	// add the node to the start tree
-	start_tree.push_back(new_node);
+	tree.push_back(new_node);
 }
 
 void RRTAlgo::addEdge(Node* parent, Node* child){
@@ -436,13 +444,14 @@ double RRTAlgo::euclideanDistance(vector<double> node, vector<double> q){
 	return sqrt(distance);
 }
 
-Node* RRTAlgo::findNearestNode(vector<double>& qRand){
+Node* RRTAlgo::findNearestNode(vector<double>& qRand, bool at_start){
+	vector<Node*> tree = at_start ? start_tree : goal_tree;
 	Node* nearest = nullptr;
 	// init: set the minimum distance to a very high value
 	double minDist = numeric_limits<double>::max();
 
 	// iterate through the tree 
-	for(Node* n : start_tree){
+	for(Node* n : tree){
 		// double dist = 0;
 		double dist = euclideanDistance(n->joint_angles, qRand);
 		
@@ -493,14 +502,16 @@ bool RRTAlgo::newConfig(vector<double>& qRand, vector<double>& qNear, vector<dou
 	return status;
 }
 
-pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand){
+pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand, bool at_start){
+	vector<Node*> tree = at_start ? start_tree : goal_tree;
+
 	Node* qNear = findNearestNode(qRand); //find the nearest node on the tree
 	vector<double> qNew(numofDOFs, 0);
 
 	// ADVANCED or REACHED; handled in newConfig
 	if(newConfig(qRand, qNear->joint_angles, qNew)){
 		addChild(qNew);
-		Node* qNewNode = start_tree.back();
+		Node* qNewNode = tree.back();
 		addEdge(qNear, qNewNode);
 		return make_pair(true, qNewNode);
 	}
@@ -646,7 +657,9 @@ static void plannerRRTConnect(
     int *planlength)
 {
     /* TODO: Replace with your implementation */
-    planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+    // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+
+
 }
 
 //*******************************************************************************************************************//
