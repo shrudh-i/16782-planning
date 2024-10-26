@@ -966,6 +966,28 @@ static void plannerPRM(
 {
     /* TODO: Replace with your implementation */
     planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+
+    int iter = 0;
+    int steps = 30;
+    double radius = 20;
+    unordered_map<int, unordered_set<int>> edges;
+    unordered_map<int, double*> nodes;
+
+    while (iter < 1000){
+        double* alpha = new double[numofDOFs];
+
+        // Generate random configuration between 0 and 2*pi
+        for(int i=0; i<numofDOFs; i++){
+            alpha[i] = ((double) rand() / (RAND_MAX + 1.0)) * M_PI * 2;
+        }
+
+        if (IsValidArmConfiguration(alpha, numofDOFs, map, x_size, y_size)){
+            nodes.insert(make_pair(iter, alpha));
+
+            // check neighbourhood points
+            // vector<double*> neighbours = getNeighbors(neighborhood_size, alpha, nodes, numofDOFs);
+        }
+    }
 }
 
 //*******************************************************************************************************************//
