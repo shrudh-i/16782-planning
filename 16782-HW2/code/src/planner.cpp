@@ -385,7 +385,7 @@ class RRTAlgo{
 		int numofDOFs;
 		int x_size;
     	int y_size;
-		double goalThreshold = 1e-2; 
+		double goalThreshold = 1e-3; 
 
 		RRTAlgo(vector<double> start, vector<double> goal, int K, double epsilon, double* map, int numofDOFs, int x_size, int y_size):
 			start(start),
@@ -415,8 +415,8 @@ class RRTAlgo{
 		pair<Node*,Node*> buildRRTConnect();
 		void retraceRRTConnectPath(Node* startNode, Node* goalNode, double ***plan, int *planlength);
 
-
 		/* RRT Star */
+		
 };
 
 
@@ -468,7 +468,7 @@ bool RRTAlgo::newConfig(vector<double>& qRand, vector<double>& qNear, vector<dou
 			true: ADVANCED, REACHED; 
 			false: TRAPPED
 	*/
-	bool status;
+	bool status = false;
 	double temp_joint_angles[numofDOFs];
 	double dist = euclideanDistance(qNear, qRand);
 
@@ -492,23 +492,22 @@ bool RRTAlgo::newConfig(vector<double>& qRand, vector<double>& qNear, vector<dou
 		}
 		// stop if we hit a collision; TRAPPED
 		else{
-			status = false;
 			break;
 		}
 	}
-
 	return status;
 }
 
 pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand, bool at_start){
 	vector<Node*>& tree = at_start ? start_tree : goal_tree;
+	// cout<<"size of the tree start?: "<<at_start<<"size:"<<tree.size()<<endl;
 
-	Node* qNear = findNearestNode(qRand); //find the nearest node on the tree
+	Node* qNear = findNearestNode(qRand, at_start); //find the nearest node on the tree
 	vector<double> qNew(numofDOFs, 0);
 
 	// ADVANCED or REACHED; handled in newConfig
 	if(newConfig(qRand, qNear->joint_angles, qNew)){
-		addChild(qNew);
+		addChild(qNew, at_start);
 		Node* qNewNode = tree.back();
 		addEdge(qNear, qNewNode);
 		return make_pair(true, qNewNode);
@@ -652,8 +651,8 @@ Node* RRTAlgo::connectTree(vector<double>& qNew, bool at_start){
 		if(S.first){
 			/*REACHED*/
 			if(euclideanDistance(S.second->joint_angles, qNew) <= goalThreshold){
-			// cout<<"found the connect node"<<endl;
-			return S.second;
+				// cout<<"found the connect node"<<endl;
+				return S.second;
 			}
 		}
 		else{
@@ -686,7 +685,7 @@ pair<Node*,Node*> RRTAlgo::buildRRTConnect(){
         } else {
 			// Generate random configuration between 0 and 2*pi
 			for(int i=0; i<numofDOFs; i++){
-				qRand[i] = ((double) rand() / (RAND_MAX + 1.0)) * M_PI * 2;
+				qRand[i] = ((double) rand() / (RAND_MAX)) * M_PI * 2;
 			}
 		}
 		
@@ -702,7 +701,7 @@ pair<Node*,Node*> RRTAlgo::buildRRTConnect(){
 		}
 
 		// swap sides
-		at_start = ! at_start;
+		at_start = !at_start;
 	}
 
 	// could not find a path
@@ -780,7 +779,7 @@ static void plannerRRTConnect(
 
 	int numOfIterations = 100000;
 	double epsilon = 0.5;
-
+	
 	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs, x_size, y_size);
 
 	// start RRT!!
@@ -911,16 +910,22 @@ int main(int argc, char** argv) {
 	//// grading script will not work and you will recieve a 0.
 	///////////////////////////////////////
 
-	// if (!equalDoubleArrays(plan[0], startPos, numOfDOFs)) {
-	// 	cout<<"plan[0]"<<*plan[0]<<endl;
-	// 	cout<<"startPos"<<*startPos<<endl;
-	// 	throw std::runtime_error("Start not matching");
-	// }
+	if (!equalDoubleArrays(plan[planlength-1], goalPos, numOfDOFs)) {
+		// throw std::runtime_error("Goal position not matching");
+		cout<<"plan[numofDofs]: "<<*plan[numOfDOFs]<<endl;
+		cout<<"goalPos: "<<*goalPos<<endl;
+		cout<<"Goal position not matching"<<endl;
+	}
 
-	// if (!equalDoubleArrays(plan[planlength-1], goalPos, numOfDOFs)) {
-	// 	throw std::runtime_error("Goal position not matching");
-	// }
+	
+	if (!equalDoubleArrays(plan[0], startPos, numOfDOFs)) {
+		cout<<"plan[0]: "<<*plan[0]<<endl;
+		cout<<"startPos: "<<*startPos<<endl;
+		// throw std::runtime_error("Start not matching");
+		cout<<"Start position not matching"<<endl;
+	}
 
+	
     // Your solution's path should start with startPos and end with goalPos
     if (!equalDoubleArrays(plan[0], startPos, numOfDOFs) || 
     	!equalDoubleArrays(plan[planlength-1], goalPos, numOfDOFs)) {
