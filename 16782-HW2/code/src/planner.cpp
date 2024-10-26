@@ -385,6 +385,7 @@ class RRTAlgo{
 		int numofDOFs;
 		int x_size;
     	int y_size;
+		double goalThreshold = 1e-3; 
 
 		RRTAlgo(vector<double> start, vector<double> goal, int K, double epsilon, double* map, int numofDOFs, int x_size, int y_size):
 			start(start),
@@ -398,28 +399,33 @@ class RRTAlgo{
 		{}
 
 		/* Class Functions: */
-		void addChild(vector<double>& new_joint_angles);
+		void addChild(vector<double>& new_joint_angles, bool at_start=true);
 		void addEdge(Node* parent, Node* child);
-		Node* findNearestNode(vector<double>& qRand);
+		Node* findNearestNode(vector<double>& qRand, bool at_start=true);
 		double euclideanDistance(vector<double> node, vector<double> q);
 		bool newConfig(vector<double>& qRand, vector<double>& qNear, vector<double>& qNew);
 
 		/* RRT */
 		Node* buildRRT();
-		pair<bool, Node*> extendRRT(vector<double>& qRand);
+		pair<bool, Node*> extendRRT(vector<double>& qRand, bool at_start=true);
 		void retraceRRTPath(Node* result, double ***plan, int *planlength);
 
 		/* RRT Connect */
+		Node* connectTree(vector<double>& qNew, bool at_start);
+		pair<Node*,Node*> buildRRTConnect();
+		void retraceRRTConnectPath(Node* startNode, Node* goalNode, double ***plan, int *planlength);
 
 		/* RRT Star */
+		
 };
 
 
-void RRTAlgo::addChild(vector<double>& new_joint_angles){
+void RRTAlgo::addChild(vector<double>& new_joint_angles, bool at_start){
+	vector<Node*>& tree = at_start ? start_tree : goal_tree;
 	Node* new_node = new Node(new_joint_angles);
 
 	// add the node to the start tree
-	start_tree.push_back(new_node);
+	tree.push_back(new_node);
 }
 
 void RRTAlgo::addEdge(Node* parent, Node* child){
@@ -436,13 +442,14 @@ double RRTAlgo::euclideanDistance(vector<double> node, vector<double> q){
 	return sqrt(distance);
 }
 
-Node* RRTAlgo::findNearestNode(vector<double>& qRand){
+Node* RRTAlgo::findNearestNode(vector<double>& qRand, bool at_start){
+	vector<Node*>& tree = at_start ? start_tree : goal_tree;
 	Node* nearest = nullptr;
 	// init: set the minimum distance to a very high value
 	double minDist = numeric_limits<double>::max();
 
 	// iterate through the tree 
-	for(Node* n : start_tree){
+	for(Node* n : tree){
 		// double dist = 0;
 		double dist = euclideanDistance(n->joint_angles, qRand);
 		
@@ -461,7 +468,7 @@ bool RRTAlgo::newConfig(vector<double>& qRand, vector<double>& qNear, vector<dou
 			true: ADVANCED, REACHED; 
 			false: TRAPPED
 	*/
-	bool status;
+	bool status = false;
 	double temp_joint_angles[numofDOFs];
 	double dist = euclideanDistance(qNear, qRand);
 
@@ -485,22 +492,23 @@ bool RRTAlgo::newConfig(vector<double>& qRand, vector<double>& qNear, vector<dou
 		}
 		// stop if we hit a collision; TRAPPED
 		else{
-			status = false;
 			break;
 		}
 	}
-
 	return status;
 }
 
-pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand){
-	Node* qNear = findNearestNode(qRand); //find the nearest node on the tree
+pair<bool, Node*> RRTAlgo::extendRRT(vector<double>& qRand, bool at_start){
+	vector<Node*>& tree = at_start ? start_tree : goal_tree;
+	// cout<<"size of the tree start?: "<<at_start<<"size:"<<tree.size()<<endl;
+
+	Node* qNear = findNearestNode(qRand, at_start); //find the nearest node on the tree
 	vector<double> qNew(numofDOFs, 0);
 
 	// ADVANCED or REACHED; handled in newConfig
 	if(newConfig(qRand, qNear->joint_angles, qNew)){
-		addChild(qNew);
-		Node* qNewNode = start_tree.back();
+		addChild(qNew, at_start);
+		Node* qNewNode = tree.back();
 		addEdge(qNear, qNewNode);
 		return make_pair(true, qNewNode);
 	}
@@ -538,7 +546,7 @@ Node* RRTAlgo::buildRRT(){
 		}
 		
 		auto result = extendRRT(qRand).second;
-		if(euclideanDistance(result->joint_angles, qGoal) <= 1e-2){
+		if(euclideanDistance(result->joint_angles, qGoal) <= goalThreshold){
 			// cout<<"found a solution"<<endl;
 			return result;
 		}
@@ -608,7 +616,7 @@ static void plannerRRT(
 	vector<double> goal; goal.assign(armgoal_anglesV_rad, armgoal_anglesV_rad + numofDOFs);
 
 
-	int numOfIterations = 10000;
+	int numOfIterations = 100000;
 	double epsilon = 0.5;
 
 	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs, x_size, y_size);
@@ -635,6 +643,122 @@ static void plannerRRT(
 //                                                                                                                   //
 //*******************************************************************************************************************//
 
+Node* RRTAlgo::connectTree(vector<double>& qNew, bool at_start){
+	pair<bool, Node*> S;
+
+	while(true){
+		S = extendRRT(qNew, at_start);
+		if(S.first){
+			/*REACHED*/
+			if(euclideanDistance(S.second->joint_angles, qNew) <= goalThreshold){
+				// cout<<"found the connect node"<<endl;
+				return S.second;
+			}
+		}
+		else{
+			/*TRAPPED*/
+			return nullptr;
+		}
+	};
+}
+
+pair<Node*,Node*> RRTAlgo::buildRRTConnect(){
+	bool at_start = true;
+
+	vector<double> qInit = start;
+	vector<double> qGoal = goal;
+
+	// add start & goal nodes to start_tree & goal_tree respectively
+	addChild(qInit, true);
+	addChild(qGoal, false);
+
+	for(int k=0; k<K; k++){
+		
+		vector<double> qRand(numofDOFs, 0);
+
+		double biasProbability = static_cast<double>(rand()) / RAND_MAX; // random value between 0 and 1
+
+        // 10% bias towards the goal - CAN BE TUNED
+        if (biasProbability <= 0.1) {
+			// cout<<"i'm biased"<<endl;
+            qRand = at_start ? qGoal : qInit;
+        } else {
+			// Generate random configuration between 0 and 2*pi
+			for(int i=0; i<numofDOFs; i++){
+				qRand[i] = ((double) rand() / (RAND_MAX)) * M_PI * 2;
+			}
+		}
+		
+		Node* resultNode = extendRRT(qRand, at_start).second; 
+
+		// extend from the other tree until resultNode
+		Node* connectNode = connectTree(resultNode->joint_angles, !at_start); 
+
+		if(connectNode){
+			// Always connect the start_tree to the goal_tree
+			pair<Node*,Node*> complete = at_start ? make_pair(resultNode,connectNode) : make_pair(connectNode,resultNode);
+			return complete;
+		}
+
+		// swap sides
+		at_start = !at_start;
+	}
+
+	// could not find a path
+	return make_pair(nullptr, nullptr);
+
+}
+
+void RRTAlgo::retraceRRTConnectPath(Node* startNode, Node* goalNode, double ***plan, int *planlength){
+
+	vector<Node*> startPath, goalPath;
+
+	// find path length by backtracking from connectNode to startNode
+    Node* current = startNode;
+    while (current != nullptr) {
+		startPath.push_back(current);
+        current = current->parent;
+    }
+	
+	// find path length by backtracking from connectNode to goalNode
+	current = goalNode;
+    while (current != nullptr) {
+		goalPath.push_back(current);
+        current = current->parent;
+    }
+
+	*planlength = startPath.size() + goalPath.size();
+
+	// extract the path
+	*plan = (double**) malloc(*planlength*sizeof(double));
+	if (*plan == nullptr) {
+        *planlength = 0;
+        return; // Handle allocation failure
+    }
+
+	 // Pointer to the current position in the plan
+    double** plan_ptr = *plan;
+
+    // Add startPath in reverse order (from start to connectNode)
+    for (int i = startPath.size() - 1; i >= 0; i--) {
+        *plan_ptr = (double*) malloc(numofDOFs * sizeof(double));
+        for (int j = 0; j < numofDOFs; j++) {
+            (*plan_ptr)[j] = startPath[i]->joint_angles[j];
+        }
+        plan_ptr++;  // Move the pointer to the next element in the plan
+    }
+
+    // Add goalPath (from connectNode to goal)
+    for (Node* node : goalPath) {
+        *plan_ptr = (double*) malloc(numofDOFs * sizeof(double));
+        for (int j = 0; j < numofDOFs; j++) {
+            (*plan_ptr)[j] = node->joint_angles[j];
+        }
+        plan_ptr++;  // Move the pointer to the next element in the plan
+    }
+}
+
+
 static void plannerRRTConnect(
     double *map,
     int x_size,
@@ -646,7 +770,32 @@ static void plannerRRTConnect(
     int *planlength)
 {
     /* TODO: Replace with your implementation */
-    planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+    // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+
+	// defining start & goal configuration of the arm
+	vector<double> start; start.assign(armstart_anglesV_rad, armstart_anglesV_rad + numofDOFs);
+	vector<double> goal; goal.assign(armgoal_anglesV_rad, armgoal_anglesV_rad + numofDOFs);
+
+
+	int numOfIterations = 100000;
+	double epsilon = 0.5;
+	
+	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs, x_size, y_size);
+
+	// start RRT!!
+	pair<Node*, Node*> result = rrt.buildRRTConnect();
+
+	// retrace & extract path
+	if(result.first && result.second){
+		rrt.retraceRRTConnectPath(result.first, result.second, plan, planlength);
+	}
+	else{
+		cout<<"No path found!"<<endl;
+	}
+
+	cout << "Path Length: " << *planlength << endl;
+
+    return;
 }
 
 //*******************************************************************************************************************//
@@ -761,6 +910,22 @@ int main(int argc, char** argv) {
 	//// grading script will not work and you will recieve a 0.
 	///////////////////////////////////////
 
+	if (!equalDoubleArrays(plan[planlength-1], goalPos, numOfDOFs)) {
+		// throw std::runtime_error("Goal position not matching");
+		cout<<"plan[numofDofs]: "<<*plan[numOfDOFs]<<endl;
+		cout<<"goalPos: "<<*goalPos<<endl;
+		cout<<"Goal position not matching"<<endl;
+	}
+
+	
+	if (!equalDoubleArrays(plan[0], startPos, numOfDOFs)) {
+		cout<<"plan[0]: "<<*plan[0]<<endl;
+		cout<<"startPos: "<<*startPos<<endl;
+		// throw std::runtime_error("Start not matching");
+		cout<<"Start position not matching"<<endl;
+	}
+
+	
     // Your solution's path should start with startPos and end with goalPos
     if (!equalDoubleArrays(plan[0], startPos, numOfDOFs) || 
     	!equalDoubleArrays(plan[planlength-1], goalPos, numOfDOFs)) {
