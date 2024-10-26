@@ -928,10 +928,8 @@ static void plannerRRTStar(
 
 
 	int numOfIterations = 100000;
-	double epsilon = 0.2;
+	double epsilon = 0.5;
 
-	cout<<"this is RRTStar"<<endl;
-	cout<<"this is ep: "<<epsilon<<endl;
 	RRTAlgo rrt(start, goal, numOfIterations, epsilon, map, numofDOFs, x_size, y_size);
 
 	// start RRT!!
