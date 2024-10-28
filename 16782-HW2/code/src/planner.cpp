@@ -957,57 +957,26 @@ static void plannerRRTStar(
 //                                                                                                                   //
 //*******************************************************************************************************************//
 
-// double getDistance(const double* a, const double* b, int numofDOFs) {
-//     return sqrt(inner_product(a, a + numofDOFs, b, 0.0,
-//         plus<>(), [](double x, double y) {
-//             double diff = fabs(x - y);
-//             return pow(min(diff, 2 * M_PI - diff), 2);
-//         }
-//     ));
-// }
-
 // function to get euclidean distance between two joint configs
-double getDistance(double* a, double* b, int numofDOFs){
-	double sum = 0.0;
-	for (size_t i = 0; i < numofDOFs; ++i) {
-		double diff = abs(a[i] - b[i]);
-		double dist = min(diff, 2*M_PI-diff);
-		sum += dist*dist;
-	}
-	return sqrt(sum);
+double calculateDistance(const double* node1, const double* node2, int numofDOFs) {
+    double sum = 0.0;
+    for (int i = 0; i < numofDOFs; ++i) {
+        double diff = abs(node1[i] - node2[i]);
+        sum += pow(min(diff, 2 * M_PI - diff), 2);
+    }
+    return sqrt(sum);
 }
 
 // neighbourhood points
-vector<double*> getNeighbors(double radius, double* vertex, unordered_map<int, double*> nodes, int numofDOFs){
-	vector<double*> neighbors;
+vector<double*> findNearbyNodes(double radius, double* vertex, unordered_map<int, double*> nodes, int numofDOFs){
+	vector<double*> nearbyNodes;
     for (const auto& n : nodes) {
-        if (getDistance(vertex, n.second, numofDOFs) <= radius) {
-            neighbors.push_back(n.second);
+        if (calculateDistance(vertex, n.second, numofDOFs) <= radius) {
+            nearbyNodes.push_back(n.second);
         }
     }
-    return neighbors;
+    return nearbyNodes;
 }
-
-// // Parallelize edge validation in getNeighbors
-// vector<double*> getNeighbors(double radius, double* vertex, 
-//                                           const unordered_map<int, double*>& nodes, int numofDOFs) {
-//     vector<double*> neighbors;
-//     mutex mtx;
-
-//     vector<thread> threads;
-//     for (const auto& n : nodes) {
-//         threads.emplace_back([&] {
-//             if (getDistance(vertex, n.second, numofDOFs) <= radius) {
-//                 lock_guard<mutex> lock(mtx);
-//                 neighbors.push_back(n.second);
-//             }
-//         });
-//     }
-//     for (auto& t : threads) {
-//         t.join();
-//     }
-//     return neighbors;
-// }
 
 bool isValidEdge(const double* start, 
                const double* end, 
@@ -1017,32 +986,24 @@ bool isValidEdge(const double* start,
                int x_size,
                int y_size)
 {
-	vector<double> point(numofDOFs);  // Use a vector to store the interpolated configuration
+    // vector to store the interpolated configuration
+	vector<double> config(numofDOFs); 
+
     for (int i = 0; i <= steps; ++i) {
         double alpha = static_cast<double>(i) / steps;
 
-        // Inline interpolation calculation
+        // interpolation calculation
         for (int j = 0; j < numofDOFs; ++j) {
-            point[j] = start[j] + alpha * (end[j] - start[j]);
+            config[j] = start[j] + alpha * (end[j] - start[j]);
         }
 
         // Check if this interpolated configuration is valid
-        if (!IsValidArmConfiguration(point.data(), numofDOFs, map, x_size, y_size)) {
+        if (!IsValidArmConfiguration(config.data(), numofDOFs, map, x_size, y_size)) {
             return false;
         }
     }
     return true;
 }
-
-// int lookupNodeIndex(const unordered_map<int, double*>& nodes, double* node) {
-//     for (const auto& [index, ptr] : nodes) {
-//         if (ptr == node) {
-//             return index;
-//         }
-//     }
-//     cerr << "Error: node not found" << endl;
-//     return -10;
-// }
 
 int lookupNodeIndex(const unordered_map<int, double*>& nodes, double* node){
 	for (const auto& n: nodes){
@@ -1051,18 +1012,17 @@ int lookupNodeIndex(const unordered_map<int, double*>& nodes, double* node){
 		}
 	}
 	cout << "node not found" << endl;
-	return -10; // node not found
+	return -1; 
 }
 
-// CHECK THIS:
-static void add_edge(unordered_map<int, unordered_set<int>>& edges, int alpha_i, int q_i) {
+static void addEdge(unordered_map<int, unordered_set<int>>& edges, int alpha_i, int q_i) {
     if (alpha_i == q_i) {
         return;  // Avoid self-loop
     }
     
     // Add bidirectional edges between alpha_i and q_i
-    edges[alpha_i].insert(q_i);
-    edges[q_i].insert(alpha_i);
+    edges[alpha_i].emplace(q_i);
+    edges[q_i].emplace(alpha_i);
 }
 
 void connectClosest(double* vertex, 
@@ -1075,13 +1035,13 @@ void connectClosest(double* vertex,
     // Find the closest node
     auto closest = min_element(nodes.begin(), nodes.end(), 
         [vertex, numofDOFs](const auto& a, const auto& b) {
-            return getDistance(vertex, a.second, numofDOFs) < getDistance(vertex, b.second, numofDOFs);
+            return calculateDistance(vertex, a.second, numofDOFs) < calculateDistance(vertex, b.second, numofDOFs);
         });
     
     int closestIndex = closest->first;
 
     // Add the edge based on the 'start' condition
-    add_edge(edges, start ? index : closestIndex, start ? closestIndex : index);
+    addEdge(edges, start ? index : closestIndex, start ? closestIndex : index);
 
     // Insert the new node
     nodes[index] = vertex;
@@ -1123,7 +1083,7 @@ vector<int> searchGraph(int startIndex,
     unordered_map<int, Node> parentMap;
 
     // Initialize the open list with the starting node
-    openList.push({startIndex, 0, getDistance(nodes.at(startIndex), nodes.at(goalIndex), numofDOFs), -1});
+    openList.push({startIndex, 0, calculateDistance(nodes.at(startIndex), nodes.at(goalIndex), numofDOFs), -1});
 
     while (!openList.empty()) {
         Node current = openList.top();
@@ -1154,8 +1114,8 @@ vector<int> searchGraph(int startIndex,
         if (it != edges.end()) {
             for (int neighbor : it->second) {
                 if (closedList.count(neighbor) == 0 && nodes.count(neighbor) > 0) {
-                    double newCost = current.cost + getDistance(nodes.at(current.index), nodes.at(neighbor), numofDOFs);
-                    double heuristic = getDistance(nodes.at(neighbor), nodes.at(goalIndex), numofDOFs);
+                    double newCost = current.cost + calculateDistance(nodes.at(current.index), nodes.at(neighbor), numofDOFs);
+                    double heuristic = calculateDistance(nodes.at(neighbor), nodes.at(goalIndex), numofDOFs);
                     openList.push({neighbor, newCost, heuristic, current.index});
                 }
             }
@@ -1198,14 +1158,14 @@ static void plannerPRM(
             nodes.insert(make_pair(iter, alpha));
 
             // check neighbourhood points
-            vector<double*> neighbors = getNeighbors(radius, alpha, nodes, numofDOFs);
+            vector<double*> neighbors = findNearbyNodes(radius, alpha, nodes, numofDOFs);
 
 			// add edges
     		for (const auto& q : neighbors) {
 				if (isValidEdge(alpha, q, numofDOFs, steps, map, x_size, y_size)){
 					int q_i = lookupNodeIndex(nodes, q);
                     if (edges[iter].size() < 10){
-                        add_edge(edges, q_i, iter);
+                        addEdge(edges, q_i, iter);
                     }
 				}
 			}
