@@ -21,6 +21,8 @@
 #include <unordered_map>
 #include <queue>
 #include <chrono>
+#include <thread>
+#include <mutex>
 
 /* Input Arguments */
 #define	MAP_IN      prhs[0]
@@ -986,6 +988,27 @@ vector<double*> getNeighbors(double radius, double* vertex, unordered_map<int, d
     return neighbors;
 }
 
+// // Parallelize edge validation in getNeighbors
+// vector<double*> getNeighbors(double radius, double* vertex, 
+//                                           const unordered_map<int, double*>& nodes, int numofDOFs) {
+//     vector<double*> neighbors;
+//     mutex mtx;
+
+//     vector<thread> threads;
+//     for (const auto& n : nodes) {
+//         threads.emplace_back([&] {
+//             if (getDistance(vertex, n.second, numofDOFs) <= radius) {
+//                 lock_guard<mutex> lock(mtx);
+//                 neighbors.push_back(n.second);
+//             }
+//         });
+//     }
+//     for (auto& t : threads) {
+//         t.join();
+//     }
+//     return neighbors;
+// }
+
 bool isValidEdge(const double* start, 
                const double* end, 
                int numofDOFs, 
@@ -1082,59 +1105,6 @@ struct CompareAStarNode {
 };
 
 // Function to search the graph using the A* algorithm
-// vector<int> searchGraph(int startIndex, 
-// 						int goalIndex,
-// 						const unordered_map<int, unordered_set<int>>& edges,
-// 						const unordered_map<int, double*>& nodes,
-// 						int numofDOFs) {
-    
-//     using Node = AStarNode; // For clarity
-//     auto compare = CompareAStarNode(); // Instantiate comparator
-    
-//     priority_queue<Node, vector<Node>, decltype(compare)> openList(compare);
-//     unordered_set<int> closedList;
-//     unordered_map<int, Node> parentMap;
-
-//     // Initialize the open list with the starting node
-//     openList.push({startIndex, 0, getDistance(nodes[startIndex], nodes[goalIndex], numofDOFs), -1});
-
-//     while (!openList.empty()) {
-//         Node current = openList.top();
-//         openList.pop();
-
-//         // Check if the goal has been reached
-//         if (current.index == goalIndex) {
-//             cout << "FOUND GOAL" << endl;
-//             vector<int> plan;
-
-//             // Backtrack to construct the path
-//             for (int idx = current.index; idx != -1; idx = parentMap[idx].parent) {
-//                 plan.push_back(idx);
-//             }
-//             reverse(plan.begin(), plan.end());
-//             return plan;
-//         }
-
-//         // Skip already-visited nodes
-//         if (!closedList.insert(current.index).second) {
-//             continue;
-//         }
-
-//         parentMap[current.index] = current;
-
-//         // Explore neighbors
-//         for (int neighbor : edges.at(current.index)) {
-//             if (closedList.count(neighbor) == 0) {
-//                 double newCost = current.cost + getDistance(nodes.at(current.index), nodes.at(neighbor), numofDOFs);
-//                 double heuristic = getDistance(nodes.at(neighbor), nodes.at(goalIdx), numofDOFs);
-//                 openList.push({neighbor, newCost, heuristic, current.index});
-//             }
-//         }
-//     }
-
-//     return {}; // Return an empty vector if no path is found
-// }
-
 vector<int> searchGraph(int startIndex, 
                         int goalIndex,
                         const unordered_map<int, unordered_set<int>>& edges,
@@ -1211,8 +1181,8 @@ static void plannerPRM(
 	auto start_time = chrono::high_resolution_clock::now();
 
     int iter = 0;
-    int steps = 30;
-    double radius = 20;
+    int steps = 10;
+    double radius = 5;
     unordered_map<int, unordered_set<int>> edges;
     unordered_map<int, double*> nodes;
 
