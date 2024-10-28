@@ -20,6 +20,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <queue>
+#include <chrono>
 
 /* Input Arguments */
 #define	MAP_IN      prhs[0]
@@ -954,6 +955,246 @@ static void plannerRRTStar(
 //                                                                                                                   //
 //*******************************************************************************************************************//
 
+// double getDistance(const double* a, const double* b, int numofDOFs) {
+//     return sqrt(inner_product(a, a + numofDOFs, b, 0.0,
+//         plus<>(), [](double x, double y) {
+//             double diff = fabs(x - y);
+//             return pow(min(diff, 2 * M_PI - diff), 2);
+//         }
+//     ));
+// }
+
+// function to get euclidean distance between two joint configs
+double getDistance(double* a, double* b, int numofDOFs){
+	double sum = 0.0;
+	for (size_t i = 0; i < numofDOFs; ++i) {
+		double diff = abs(a[i] - b[i]);
+		double dist = min(diff, 2*M_PI-diff);
+		sum += dist*dist;
+	}
+	return sqrt(sum);
+}
+
+// neighbourhood points
+vector<double*> getNeighbors(double radius, double* vertex, unordered_map<int, double*> nodes, int numofDOFs){
+	vector<double*> neighbors;
+    for (const auto& n : nodes) {
+        if (getDistance(vertex, n.second, numofDOFs) <= radius) {
+            neighbors.push_back(n.second);
+        }
+    }
+    return neighbors;
+}
+
+bool isValidEdge(const double* start, 
+               const double* end, 
+               int numofDOFs, 
+               int steps,
+               double* map,
+               int x_size,
+               int y_size)
+{
+	vector<double> point(numofDOFs);  // Use a vector to store the interpolated configuration
+    for (int i = 0; i <= steps; ++i) {
+        double alpha = static_cast<double>(i) / steps;
+
+        // Inline interpolation calculation
+        for (int j = 0; j < numofDOFs; ++j) {
+            point[j] = start[j] + alpha * (end[j] - start[j]);
+        }
+
+        // Check if this interpolated configuration is valid
+        if (!IsValidArmConfiguration(point.data(), numofDOFs, map, x_size, y_size)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// int lookupNodeIndex(const unordered_map<int, double*>& nodes, double* node) {
+//     for (const auto& [index, ptr] : nodes) {
+//         if (ptr == node) {
+//             return index;
+//         }
+//     }
+//     cerr << "Error: node not found" << endl;
+//     return -10;
+// }
+
+int lookupNodeIndex(const unordered_map<int, double*>& nodes, double* node){
+	for (const auto& n: nodes){
+		if (n.second == node){
+			return n.first;
+		}
+	}
+	cout << "node not found" << endl;
+	return -10; // node not found
+}
+
+// CHECK THIS:
+static void add_edge(unordered_map<int, unordered_set<int>>& edges, int alpha_i, int q_i) {
+    if (alpha_i == q_i) {
+        return;  // Avoid self-loop
+    }
+    
+    // Add bidirectional edges between alpha_i and q_i
+    edges[alpha_i].insert(q_i);
+    edges[q_i].insert(alpha_i);
+}
+
+void connectClosest(double* vertex, 
+                    unordered_map<int, double*>& nodes, 
+                    int numofDOFs, 
+                    unordered_map<int, unordered_set<int>>& edges, 
+                    int index, 
+                    bool start) 
+{
+    // Find the closest node
+    auto closest = min_element(nodes.begin(), nodes.end(), 
+        [vertex, numofDOFs](const auto& a, const auto& b) {
+            return getDistance(vertex, a.second, numofDOFs) < getDistance(vertex, b.second, numofDOFs);
+        });
+    
+    int closestIndex = closest->first;
+
+    // Add the edge based on the 'start' condition
+    add_edge(edges, start ? index : closestIndex, start ? closestIndex : index);
+
+    // Insert the new node
+    nodes[index] = vertex;
+}
+
+/*
+	A-Star
+*/
+
+struct AStarNode {
+    int index;
+    double cost; 
+    double heuristic;
+    int parent;
+};
+
+struct CompareAStarNode {
+    bool operator()(const AStarNode& n1, const AStarNode& n2) const {
+        return (n1.cost + n1.heuristic) > (n2.cost + n2.heuristic);
+    }
+};
+
+// Function to search the graph using the A* algorithm
+// vector<int> searchGraph(int startIndex, 
+// 						int goalIndex,
+// 						const unordered_map<int, unordered_set<int>>& edges,
+// 						const unordered_map<int, double*>& nodes,
+// 						int numofDOFs) {
+    
+//     using Node = AStarNode; // For clarity
+//     auto compare = CompareAStarNode(); // Instantiate comparator
+    
+//     priority_queue<Node, vector<Node>, decltype(compare)> openList(compare);
+//     unordered_set<int> closedList;
+//     unordered_map<int, Node> parentMap;
+
+//     // Initialize the open list with the starting node
+//     openList.push({startIndex, 0, getDistance(nodes[startIndex], nodes[goalIndex], numofDOFs), -1});
+
+//     while (!openList.empty()) {
+//         Node current = openList.top();
+//         openList.pop();
+
+//         // Check if the goal has been reached
+//         if (current.index == goalIndex) {
+//             cout << "FOUND GOAL" << endl;
+//             vector<int> plan;
+
+//             // Backtrack to construct the path
+//             for (int idx = current.index; idx != -1; idx = parentMap[idx].parent) {
+//                 plan.push_back(idx);
+//             }
+//             reverse(plan.begin(), plan.end());
+//             return plan;
+//         }
+
+//         // Skip already-visited nodes
+//         if (!closedList.insert(current.index).second) {
+//             continue;
+//         }
+
+//         parentMap[current.index] = current;
+
+//         // Explore neighbors
+//         for (int neighbor : edges.at(current.index)) {
+//             if (closedList.count(neighbor) == 0) {
+//                 double newCost = current.cost + getDistance(nodes.at(current.index), nodes.at(neighbor), numofDOFs);
+//                 double heuristic = getDistance(nodes.at(neighbor), nodes.at(goalIdx), numofDOFs);
+//                 openList.push({neighbor, newCost, heuristic, current.index});
+//             }
+//         }
+//     }
+
+//     return {}; // Return an empty vector if no path is found
+// }
+
+vector<int> searchGraph(int startIndex, 
+                        int goalIndex,
+                        const unordered_map<int, unordered_set<int>>& edges,
+                        const unordered_map<int, double*>& nodes,
+                        int numofDOFs) {
+
+    // Check for existence of start and goal nodes
+    if (nodes.find(startIndex) == nodes.end() || nodes.find(goalIndex) == nodes.end()) {
+        cerr << "Error: Start or goal node does not exist." << endl;
+        return {};
+    }
+
+    using Node = AStarNode; // For clarity
+    priority_queue<Node, vector<Node>, CompareAStarNode> openList;
+    unordered_set<int> closedList;
+    unordered_map<int, Node> parentMap;
+
+    // Initialize the open list with the starting node
+    openList.push({startIndex, 0, getDistance(nodes.at(startIndex), nodes.at(goalIndex), numofDOFs), -1});
+
+    while (!openList.empty()) {
+        Node current = openList.top();
+        openList.pop();
+
+        // Check if the goal has been reached
+        if (current.index == goalIndex) {
+            cout << "FOUND GOAL" << endl;
+            vector<int> plan;
+
+            // Backtrack to construct the path
+            for (int idx = current.index; idx != -1; idx = parentMap[idx].parent) {
+                plan.push_back(idx);
+            }
+            reverse(plan.begin(), plan.end());
+            return plan;
+        }
+
+        // Skip already-visited nodes
+        if (!closedList.insert(current.index).second) {
+            continue;
+        }
+
+        parentMap[current.index] = current;
+
+        // Explore neighbors
+        auto it = edges.find(current.index);
+        if (it != edges.end()) {
+            for (int neighbor : it->second) {
+                if (closedList.count(neighbor) == 0 && nodes.count(neighbor) > 0) {
+                    double newCost = current.cost + getDistance(nodes.at(current.index), nodes.at(neighbor), numofDOFs);
+                    double heuristic = getDistance(nodes.at(neighbor), nodes.at(goalIndex), numofDOFs);
+                    openList.push({neighbor, newCost, heuristic, current.index});
+                }
+            }
+        }
+    }
+
+    return {}; // Return an empty vector if no path is found
+}
+
 static void plannerPRM(
     double *map,
     int x_size,
@@ -965,7 +1206,9 @@ static void plannerPRM(
     int *planlength)
 {
     /* TODO: Replace with your implementation */
-    planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+    // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+
+	auto start_time = chrono::high_resolution_clock::now();
 
     int iter = 0;
     int steps = 30;
@@ -985,9 +1228,56 @@ static void plannerPRM(
             nodes.insert(make_pair(iter, alpha));
 
             // check neighbourhood points
-            // vector<double*> neighbours = getNeighbors(neighborhood_size, alpha, nodes, numofDOFs);
+            vector<double*> neighbors = getNeighbors(radius, alpha, nodes, numofDOFs);
+
+			// add edges
+    		for (const auto& q : neighbors) {
+				if (isValidEdge(alpha, q, numofDOFs, steps, map, x_size, y_size)){
+					int q_i = lookupNodeIndex(nodes, q);
+                    if (edges[iter].size() < 10){
+                        add_edge(edges, q_i, iter);
+                    }
+				}
+			}
+			iter++;
         }
     }
+
+	// connect closest nodes to start and goal
+    int startIndex = iter+1;
+    int goalIndex = iter+2;
+    connectClosest(armstart_anglesV_rad, nodes, numofDOFs, edges, startIndex, true);
+    connectClosest(armgoal_anglesV_rad, nodes, numofDOFs, edges, goalIndex, false);
+
+    // search graph using A*
+    vector<int> pathIndices = searchGraph(startIndex, goalIndex, edges, nodes, numofDOFs);
+
+	// planning time
+    auto plan_end = chrono::high_resolution_clock::now();
+    auto planning_time = chrono::duration_cast<chrono::milliseconds>(plan_end - start_time);
+
+	// populate plan
+    if (!pathIndices.empty()) {
+        *planlength = pathIndices.size();
+        *plan = (double**) malloc(*planlength * sizeof(double*));
+        
+        for (int i = 0; i < *planlength; ++i) {
+            (*plan)[i] = nodes[pathIndices[i]];
+        }
+    }
+	else {
+        cout << "Failed to find a path." << endl;
+    }
+
+	// full solution time
+    auto end_time = chrono::high_resolution_clock::now();
+    auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
+
+	    string under_five = (total_time.count() < 5000) ? "Yes" : "No";
+	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
+
+	cout << "Planning Time: " << planning_time.count() << " milliseconds" << endl;
+	cout << "Path Length: " << *planlength << endl;
 }
 
 //*******************************************************************************************************************//
