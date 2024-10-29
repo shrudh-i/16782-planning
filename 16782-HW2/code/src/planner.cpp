@@ -360,6 +360,68 @@ void planner(
 //                                                                                                                   //
 //*******************************************************************************************************************//
 
+// joint angles sum
+double getPlanQuality(double*** plan, int* planlength, int numofDOFs) {
+    double cost = 0;
+    for (int i = 0; i < *planlength - 1; i++) {
+        double* current = (*plan)[i];
+        double* next = (*plan)[i+1];
+        double diff = 0;
+        for (int j = 0; j < numofDOFs; j++) {
+            diff = abs(current[j] - next[j]);
+		    diff = min(diff, 2*M_PI-diff);
+        }
+        cost += diff;
+    }
+    return cost;
+}
+
+// Function to write results to a CSV file
+void writeResultsToCSV(const string& planner, int planLength, double pathQuality,
+                        const vector<double>& start, const vector<double>& goal,
+                        int numofDOFs) {
+    ofstream outfile("path_quality.csv", ios::app);
+
+    // Check if the file exists and is empty
+    bool isEmpty = false;
+    ifstream checkFile("path_quality.csv");
+    if (checkFile.good()) { // Check if file exists
+        checkFile.seekg(0, ios::end); // Move to the end of the file
+        isEmpty = (checkFile.tellg() == 0); // Check if file size is 0
+    }
+    checkFile.close(); // Close the file
+
+    if (outfile.is_open()) {
+        // Write header if the file is empty
+        if (isEmpty) {
+            outfile << "Planner,Path Length,Path Quality,Start Position,End Position\n"; // Write the header
+        }
+
+        // Prepare start and goal positions as strings
+        stringstream startStream, goalStream;
+        for (int i = 0; i < numofDOFs; ++i) {
+            startStream << start[i];
+            goalStream << goal[i];
+            if (i < numofDOFs - 1) {
+                startStream << ";"; // Separate angles with a semicolon
+                goalStream << ";";
+            }
+        }
+
+        // Format the output to ensure it's CSV compliant
+        outfile << planner << "," 
+                << planLength << "," 
+                << pathQuality << ","
+                << "\"" << startStream.str() << "\"," // Quoting the start position
+                << "\"" << goalStream.str() << "\"" // Quoting the end position
+                << "\n"; // New line for the next entry
+
+        outfile.close(); // Close the file
+    } else {
+        cerr << "Unable to open file!" << endl;
+    }
+}
+
 /* Each node of the tree:
 		* joint_angles: joint configuration of the arm 
 		* parent: pointer to node's parent in tree
@@ -647,7 +709,13 @@ static void plannerRRT(
 		cout<<"No path found!"<<endl;
 	}
 
+	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+
 	cout << "Path Length: " << *planlength << endl;
+	cout << "Path Quality: " << pathQuality << endl;
+
+	// Write results to CSV
+    writeResultsToCSV("RRT", *planlength, pathQuality, start, goal, numofDOFs);
 
     return;
 }
@@ -808,7 +876,13 @@ static void plannerRRTConnect(
 		cout<<"No path found!"<<endl;
 	}
 
+	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+
 	cout << "Path Length: " << *planlength << endl;
+	cout << "Path Quality: " << pathQuality << endl;
+
+	// Write results to CSV
+    writeResultsToCSV("RRTConnect", *planlength, pathQuality, start, goal, numofDOFs);
 
     return;
 }
@@ -946,7 +1020,13 @@ static void plannerRRTStar(
 		cout<<"No path found!"<<endl;
 	}
 
+	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+
 	cout << "Path Length: " << *planlength << endl;
+	cout << "Path Quality: " << pathQuality << endl;
+
+	// Write results to CSV
+    writeResultsToCSV("RRTStar", *planlength, pathQuality, start, goal, numofDOFs);
 
     return;
 }
@@ -1095,9 +1175,11 @@ vector<int> searchGraph(int startIndex,
             vector<int> plan;
 
             // Backtrack to construct the path
-            for (int idx = current.index; idx != -1; idx = parentMap[idx].parent) {
-                plan.push_back(idx);
+            while (current.parent != -1) {
+                plan.push_back(current.index);
+                current = parentMap[current.parent];
             }
+            plan.push_back(startIndex);
             reverse(plan.begin(), plan.end());
             return plan;
         }
@@ -1137,6 +1219,9 @@ static void plannerPRM(
 {
     /* TODO: Replace with your implementation */
     // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+
+	vector<double> start; start.assign(armstart_anglesV_rad, armstart_anglesV_rad + numofDOFs);
+	vector<double> goal; goal.assign(armgoal_anglesV_rad, armgoal_anglesV_rad + numofDOFs);
 
 	auto start_time = chrono::high_resolution_clock::now();
 
@@ -1203,11 +1288,18 @@ static void plannerPRM(
     auto end_time = chrono::high_resolution_clock::now();
     auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
-	    string under_five = (total_time.count() < 5000) ? "Yes" : "No";
+	string under_five = (total_time.count() < 5000) ? "Yes" : "No";
 	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
-
 	cout << "Planning Time: " << planning_time.count() << " milliseconds" << endl;
 	cout << "Path Length: " << *planlength << endl;
+
+	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+
+	cout << "Path Length: " << *planlength << endl;
+	cout << "Path Quality: " << pathQuality << endl;
+
+	// Write results to CSV
+    writeResultsToCSV("PRM", *planlength, pathQuality, start, goal, numofDOFs);
 }
 
 //*******************************************************************************************************************//
