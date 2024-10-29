@@ -611,8 +611,9 @@ Node* RRTAlgo::buildRRT(){
 	for(int k=0; k<K; k++){
 		
 		vector<double> qRand(numofDOFs, 0);
-
+		
 		double biasProbability = static_cast<double>(rand()) / RAND_MAX; // random value between 0 and 1
+		cout<<biasProbability<<endl;
 
         // 10% bias towards the goal - CAN BE TUNED
         if (biasProbability <= 0.1) {
@@ -1379,6 +1380,7 @@ int main(int argc, char** argv) {
 
 	double** plan = NULL;
 	int planlength = 0;
+	srand(static_cast<unsigned int>(time(0)));
 
     // Call the corresponding planner function
     if (whichPlanner == PRM)
