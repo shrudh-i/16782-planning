@@ -360,27 +360,12 @@ void planner(
 //                                                                                                                   //
 //*******************************************************************************************************************//
 
-// joint angles sum
-double getPlanQuality(double*** plan, int* planlength, int numofDOFs) {
-    double cost = 0;
-    for (int i = 0; i < *planlength - 1; i++) {
-        double* current = (*plan)[i];
-        double* next = (*plan)[i+1];
-        double diff = 0;
-        for (int j = 0; j < numofDOFs; j++) {
-            diff = abs(current[j] - next[j]);
-		    diff = min(diff, 2*M_PI-diff);
-        }
-        cost += diff;
-    }
-    return cost;
-}
-
-// Function to write results to a CSV file
-void writeResultsToCSV(const string& planner, int planLength, double pathQuality,
-                        const vector<double>& start, const vector<double>& goal,
-                        int numofDOFs) {
-    ofstream outfile("path_quality.csv", ios::app);
+// helper function to write results to a CSV file
+void writeResultsToCSV(const string& planner, int planLength, double pathQuality, 
+						double numVertices, string under_five, const vector<double>& start, 
+						const vector<double>& goal, int numofDOFs) {
+    
+	ofstream outfile("path_quality.csv", ios::app);
 
     // Check if the file exists and is empty
     bool isEmpty = false;
@@ -394,7 +379,7 @@ void writeResultsToCSV(const string& planner, int planLength, double pathQuality
     if (outfile.is_open()) {
         // Write header if the file is empty
         if (isEmpty) {
-            outfile << "Planner,Path Length,Path Quality,Start Position,End Position\n"; // Write the header
+            outfile << "Planner,Path Length,Path Quality,numVertices,under_five,Start Position,End Position\n"; // Write the header
         }
 
         // Prepare start and goal positions as strings
@@ -412,6 +397,8 @@ void writeResultsToCSV(const string& planner, int planLength, double pathQuality
         outfile << planner << "," 
                 << planLength << "," 
                 << pathQuality << ","
+				<< numVertices << ","
+				<< under_five << ","
                 << "\"" << startStream.str() << "\"," // Quoting the start position
                 << "\"" << goalStream.str() << "\"" // Quoting the end position
                 << "\n"; // New line for the next entry
@@ -420,6 +407,22 @@ void writeResultsToCSV(const string& planner, int planLength, double pathQuality
     } else {
         cerr << "Unable to open file!" << endl;
     }
+}
+
+// joint angles sum
+double getPlanQuality(double*** plan, int* planlength, int numofDOFs) {
+    double cost = 0;
+    for (int i = 0; i < *planlength - 1; i++) {
+        double* current = (*plan)[i];
+        double* next = (*plan)[i+1];
+        double diff = 0;
+        for (int j = 0; j < numofDOFs; j++) {
+            diff = abs(current[j] - next[j]);
+		    diff = min(diff, 2*M_PI-diff);
+        }
+        cost += diff;
+    }
+    return cost;
 }
 
 /* Each node of the tree:
@@ -687,6 +690,8 @@ static void plannerRRT(
 {
     /* TODO: Replace with your implementation */
 	// planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
+
+	auto start_time = chrono::high_resolution_clock::now();
 	
 	// defining start & goal configuration of the arm
 	vector<double> start; start.assign(armstart_anglesV_rad, armstart_anglesV_rad + numofDOFs);
@@ -709,13 +714,21 @@ static void plannerRRT(
 		cout<<"No path found!"<<endl;
 	}
 
-	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+	auto end_time = chrono::high_resolution_clock::now();
+    auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
+    string under_five = (total_time.count() < 5000) ? "Yes" : "No";
+	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+	double numVertices = rrt.start_tree.size() + rrt.goal_tree.size();
+
+	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
+	cout << "Planning Time: " << total_time.count() << " milliseconds" << endl;
+	cout << "Number of Vertices: " << numVertices << endl;
 	cout << "Path Length: " << *planlength << endl;
 	cout << "Path Quality: " << pathQuality << endl;
 
 	// Write results to CSV
-    writeResultsToCSV("RRT", *planlength, pathQuality, start, goal, numofDOFs);
+    writeResultsToCSV("RRT", *planlength, pathQuality, numVertices, under_five, start, goal, numofDOFs);
 
     return;
 }
@@ -855,6 +868,8 @@ static void plannerRRTConnect(
     /* TODO: Replace with your implementation */
     // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
 
+	auto start_time = chrono::high_resolution_clock::now();
+
 	// defining start & goal configuration of the arm
 	vector<double> start; start.assign(armstart_anglesV_rad, armstart_anglesV_rad + numofDOFs);
 	vector<double> goal; goal.assign(armgoal_anglesV_rad, armgoal_anglesV_rad + numofDOFs);
@@ -876,13 +891,21 @@ static void plannerRRTConnect(
 		cout<<"No path found!"<<endl;
 	}
 
-	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+	auto end_time = chrono::high_resolution_clock::now();
+    auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
+	string under_five = (total_time.count() < 5000) ? "Yes" : "No";
+	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+	double numVertices = rrt.start_tree.size() + rrt.goal_tree.size();
+
+	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
+	cout << "Planning Time: " << total_time.count() << " milliseconds" << endl;
+	cout << "Number of Vertices: " << numVertices << endl;
 	cout << "Path Length: " << *planlength << endl;
 	cout << "Path Quality: " << pathQuality << endl;
 
 	// Write results to CSV
-    writeResultsToCSV("RRTConnect", *planlength, pathQuality, start, goal, numofDOFs);
+    writeResultsToCSV("RRTConnect", *planlength, pathQuality, numVertices, under_five, start, goal, numofDOFs);
 
     return;
 }
@@ -999,6 +1022,8 @@ static void plannerRRTStar(
     /* TODO: Replace with your implementation */
     // planner(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
 
+	auto start_time = chrono::high_resolution_clock::now();
+
 	// defining start & goal configuration of the arm
 	vector<double> start; start.assign(armstart_anglesV_rad, armstart_anglesV_rad + numofDOFs);
 	vector<double> goal; goal.assign(armgoal_anglesV_rad, armgoal_anglesV_rad + numofDOFs);
@@ -1020,13 +1045,21 @@ static void plannerRRTStar(
 		cout<<"No path found!"<<endl;
 	}
 
-	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+	auto end_time = chrono::high_resolution_clock::now();
+    auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
+	string under_five = (total_time.count() < 5000) ? "Yes" : "No";
+	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+	double numVertices = rrt.start_tree.size() + rrt.goal_tree.size();
+
+	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
+	cout << "Planning Time: " << total_time.count() << " milliseconds" << endl;
+	cout << "Number of Vertices: " << numVertices << endl;
 	cout << "Path Length: " << *planlength << endl;
 	cout << "Path Quality: " << pathQuality << endl;
 
 	// Write results to CSV
-    writeResultsToCSV("RRTStar", *planlength, pathQuality, start, goal, numofDOFs);
+    writeResultsToCSV("RRTStar", *planlength, pathQuality, numVertices, under_five, start, goal, numofDOFs);
 
     return;
 }
@@ -1288,18 +1321,18 @@ static void plannerPRM(
     auto end_time = chrono::high_resolution_clock::now();
     auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
+	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
+	double numVertices = nodes.size();
+
 	string under_five = (total_time.count() < 5000) ? "Yes" : "No";
 	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
 	cout << "Planning Time: " << planning_time.count() << " milliseconds" << endl;
-	cout << "Path Length: " << *planlength << endl;
-
-	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
-
+	cout << "Number of Vertices: " << numVertices << endl;
 	cout << "Path Length: " << *planlength << endl;
 	cout << "Path Quality: " << pathQuality << endl;
 
 	// Write results to CSV
-    writeResultsToCSV("PRM", *planlength, pathQuality, start, goal, numofDOFs);
+    writeResultsToCSV("PRM", *planlength, pathQuality, numVertices, under_five, start, goal, numofDOFs);
 }
 
 //*******************************************************************************************************************//
@@ -1373,22 +1406,6 @@ int main(int argc, char** argv) {
 	//// If you modify something below, please change it back afterwards as my 
 	//// grading script will not work and you will recieve a 0.
 	///////////////////////////////////////
-
-	if (!equalDoubleArrays(plan[planlength-1], goalPos, numOfDOFs)) {
-		// throw std::runtime_error("Goal position not matching");
-		cout<<"plan[numofDofs]: "<<*plan[numOfDOFs]<<endl;
-		cout<<"goalPos: "<<*goalPos<<endl;
-		cout<<"Goal position not matching"<<endl;
-	}
-
-	
-	if (!equalDoubleArrays(plan[0], startPos, numOfDOFs)) {
-		cout<<"plan[0]: "<<*plan[0]<<endl;
-		cout<<"startPos: "<<*startPos<<endl;
-		// throw std::runtime_error("Start not matching");
-		cout<<"Start position not matching"<<endl;
-	}
-
 	
     // Your solution's path should start with startPos and end with goalPos
     if (!equalDoubleArrays(plan[0], startPos, numOfDOFs) || 
