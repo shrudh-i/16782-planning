@@ -362,7 +362,7 @@ void planner(
 
 // helper function to write results to a CSV file
 void writeResultsToCSV(const string& planner, int planLength, double pathQuality, 
-						double numVertices, string under_five, const vector<double>& start, 
+						double numVertices, float planningTime, string under_five, const vector<double>& start, 
 						const vector<double>& goal, int numofDOFs) {
     
 	ofstream outfile("path_quality.csv", ios::app);
@@ -379,7 +379,7 @@ void writeResultsToCSV(const string& planner, int planLength, double pathQuality
     if (outfile.is_open()) {
         // Write header if the file is empty
         if (isEmpty) {
-            outfile << "Planner,Path Length,Path Quality,numVertices,under_five,Start Position,End Position\n"; // Write the header
+            outfile << "Planner,Path Length,Path Quality,numVertices,Planning Time,under_five,Start Position,End Position\n"; // Write the header
         }
 
         // Prepare start and goal positions as strings
@@ -398,6 +398,7 @@ void writeResultsToCSV(const string& planner, int planLength, double pathQuality
                 << planLength << "," 
                 << pathQuality << ","
 				<< numVertices << ","
+				<< planningTime << ","
 				<< under_five << ","
                 << "\"" << startStream.str() << "\"," // Quoting the start position
                 << "\"" << goalStream.str() << "\"" // Quoting the end position
@@ -613,7 +614,6 @@ Node* RRTAlgo::buildRRT(){
 		vector<double> qRand(numofDOFs, 0);
 		
 		double biasProbability = static_cast<double>(rand()) / RAND_MAX; // random value between 0 and 1
-		cout<<biasProbability<<endl;
 
         // 10% bias towards the goal - CAN BE TUNED
         if (biasProbability <= 0.1) {
@@ -718,18 +718,19 @@ static void plannerRRT(
 	auto end_time = chrono::high_resolution_clock::now();
     auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
-    string under_five = (total_time.count() < 5000) ? "Yes" : "No";
+	float planningTime = total_time.count();
+    string under_five = (planningTime < 5000) ? "Yes" : "No";
 	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
 	double numVertices = rrt.start_tree.size() + rrt.goal_tree.size();
 
 	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
-	cout << "Planning Time: " << total_time.count() << " milliseconds" << endl;
+	cout << "Planning Time: " << planningTime << " milliseconds" << endl;
 	cout << "Number of Vertices: " << numVertices << endl;
 	cout << "Path Length: " << *planlength << endl;
 	cout << "Path Quality: " << pathQuality << endl;
 
 	// Write results to CSV
-    writeResultsToCSV("RRT", *planlength, pathQuality, numVertices, under_five, start, goal, numofDOFs);
+    writeResultsToCSV("RRT", *planlength, pathQuality, numVertices, planningTime, under_five, start, goal, numofDOFs);
 
     return;
 }
@@ -895,18 +896,19 @@ static void plannerRRTConnect(
 	auto end_time = chrono::high_resolution_clock::now();
     auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
-	string under_five = (total_time.count() < 5000) ? "Yes" : "No";
+	float planningTime = total_time.count();
+	string under_five = (planningTime < 5000) ? "Yes" : "No";
 	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
 	double numVertices = rrt.start_tree.size() + rrt.goal_tree.size();
 
 	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
-	cout << "Planning Time: " << total_time.count() << " milliseconds" << endl;
+	cout << "Planning Time: " << planningTime << " milliseconds" << endl;
 	cout << "Number of Vertices: " << numVertices << endl;
 	cout << "Path Length: " << *planlength << endl;
 	cout << "Path Quality: " << pathQuality << endl;
 
 	// Write results to CSV
-    writeResultsToCSV("RRTConnect", *planlength, pathQuality, numVertices, under_five, start, goal, numofDOFs);
+    writeResultsToCSV("RRTConnect", *planlength, pathQuality, numVertices, planningTime, under_five, start, goal, numofDOFs);
 
     return;
 }
@@ -1049,18 +1051,19 @@ static void plannerRRTStar(
 	auto end_time = chrono::high_resolution_clock::now();
     auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
-	string under_five = (total_time.count() < 5000) ? "Yes" : "No";
+	float planningTime = total_time.count();
+	string under_five = (planningTime < 5000) ? "Yes" : "No";
 	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
 	double numVertices = rrt.start_tree.size() + rrt.goal_tree.size();
 
 	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
-	cout << "Planning Time: " << total_time.count() << " milliseconds" << endl;
+	cout << "Planning Time: " << planningTime << " milliseconds" << endl;
 	cout << "Number of Vertices: " << numVertices << endl;
 	cout << "Path Length: " << *planlength << endl;
 	cout << "Path Quality: " << pathQuality << endl;
 
 	// Write results to CSV
-    writeResultsToCSV("RRTStar", *planlength, pathQuality, numVertices, under_five, start, goal, numofDOFs);
+    writeResultsToCSV("RRTStar", *planlength, pathQuality, numVertices, planningTime, under_five, start, goal, numofDOFs);
 
     return;
 }
@@ -1322,18 +1325,19 @@ static void plannerPRM(
     auto end_time = chrono::high_resolution_clock::now();
     auto total_time = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
 
+	float planningTime = planning_time.count();
 	double pathQuality = getPlanQuality(plan, planlength, numofDOFs);
 	double numVertices = nodes.size();
 
 	string under_five = (total_time.count() < 5000) ? "Yes" : "No";
 	cout << "Generated Solution in Under Five Seconds: " << under_five << endl;
-	cout << "Planning Time: " << planning_time.count() << " milliseconds" << endl;
+	cout << "Planning Time: " << planningTime  << " milliseconds" << endl;
 	cout << "Number of Vertices: " << numVertices << endl;
 	cout << "Path Length: " << *planlength << endl;
 	cout << "Path Quality: " << pathQuality << endl;
 
 	// Write results to CSV
-    writeResultsToCSV("PRM", *planlength, pathQuality, numVertices, under_five, start, goal, numofDOFs);
+    writeResultsToCSV("PRM", *planlength, pathQuality, numVertices, planningTime, under_five, start, goal, numofDOFs);
 }
 
 //*******************************************************************************************************************//
