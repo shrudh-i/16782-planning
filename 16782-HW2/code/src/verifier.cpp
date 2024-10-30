@@ -66,6 +66,7 @@ using std::endl;
 /// @param filepath 
 /// @return map, x_size, y_size
 tuple<double*, int, int> loadMap(string filepath) {
+  printf(filepath.c_str());
   std::FILE *f = fopen(filepath.c_str(), "r");
 	if (f) {
   }
@@ -305,49 +306,53 @@ bool equalDoubleArrays(double* v1, double *v2, int size) {
  * */
 int main(int argc, char** argv) {
   double* map;
-	int x_size, y_size;
+  int x_size, y_size;
 
-  tie(map, x_size, y_size) = loadMap(argv[1]);
-	int numOfDOFs = std::stoi(argv[2]);
-	double* startPos = doubleArrayFromString(argv[3]);
-	double* goalPos = doubleArrayFromString(argv[4]);
-	string inputSolutionFile = argv[5];
+	std::string mapDirPath = MAPS_DIR;
+  std::string mapFilePath = mapDirPath + "/" + argv[1];
+  std::cout << "Reading problem definition from: " << mapFilePath << std::endl;
+  tie(map, x_size, y_size) = loadMap(mapFilePath);
+  int numOfDOFs = std::stoi(argv[2]);
+  double* startPos = doubleArrayFromString(argv[3]);
+  double* goalPos = doubleArrayFromString(argv[4]);
+  std::string outputDir = OUTPUT_DIR;
+  string inputSolutionFile = outputDir + "/" + argv[5];
 
   std::ifstream infile(inputSolutionFile);
   if (!infile.is_open()) {
-      printf("Opening file failed! %s\n", inputSolutionFile.c_str());
-      throw runtime_error("Opening file failed!");
+    printf("Opening file failed! %s\n", inputSolutionFile.c_str());
+    throw runtime_error("Opening file failed!");
   }
   string curLine;
   std::getline(infile, curLine); // Don't care about map
   double* curPos = nullptr;
   double* nextPos;
   while (std::getline(infile, curLine)) {
-    nextPos = doubleArrayFromString(curLine);
-    
-    //// Check nextPos is valid
-    if (!IsValidArmConfiguration(nextPos, numOfDOFs, map, x_size, y_size)) {
-      infile.close();
-      printf("Failed verifier!\n");
-      return -1; // -1 is failure
-    }
+		nextPos = doubleArrayFromString(curLine);
+		//// Check nextPos is valid
+		if (!IsValidArmConfiguration(nextPos, numOfDOFs, map, x_size, y_size)) {
+			infile.close();
+			printf("Failed verifier!\n");
+			return -1; // -1 is failure
+		}
 
-    //// Check start positions match in the beginning
-    if (curPos == nullptr) {
-      if (!equalDoubleArrays(nextPos, startPos, numOfDOFs)) {
-        infile.close();
-        printf("Failed verifier!\n");
-        return -1; // -1 is failure
-      }
-    }
-    curPos = nextPos;
-  }
-  if (!equalDoubleArrays(nextPos, goalPos, numOfDOFs)) { // Check goal positions match
-      infile.close();
-      printf("Failed verifier!\n");
-      return -1; // -1 is failure
-  }
-  infile.close();
-  printf("Passed verifier!\n");
-  return 0; // 0 is success
+		//// Check start positions match in the beginning
+		if (curPos == nullptr) {
+			if (!equalDoubleArrays(nextPos, startPos, numOfDOFs)) {
+				infile.close();
+				printf("Failed verifier!\n");
+				return -1; // -1 is failure
+			}
+		}
+		curPos = nextPos;
+	}
+
+	if (!equalDoubleArrays(nextPos, goalPos, numOfDOFs)) { // Check goal positions match
+		infile.close();
+		printf("Failed verifier!\n");
+		return -1; // -1 is failure
+	}
+	infile.close();
+	printf("Passed verifier!\n");
+	return 0; // 0 is success
 }
