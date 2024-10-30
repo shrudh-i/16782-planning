@@ -365,7 +365,7 @@ void writeResultsToCSV(const string& planner, int planLength, double pathQuality
 						double numVertices, float planningTime, string under_five, const vector<double>& start, 
 						const vector<double>& goal, int numofDOFs) {
     
-	ofstream outfile("path_quality.csv", ios::app);
+	ofstream outfile("../output/path_quality.csv", ios::app);
 
     // Check if the file exists and is empty
     bool isEmpty = false;
@@ -1001,7 +1001,7 @@ Node* RRTAlgo::buildRRTStar(){
 		
 		auto result = extendRRTStar(qRand).second;
 
-		if(euclideanDistance(result->joint_angles, qGoal) <= goalThreshold){
+		if(result && euclideanDistance(result->joint_angles, qGoal) <= goalThreshold){
 			// cout<<"found a solution"<<endl;
 			return result;
 		}
