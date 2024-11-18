@@ -1021,6 +1021,7 @@ pair<State, unordered_map<State, State, StateHasher>> astar(
 
     // Set the starting state and its initial g value
     gValues[start] = 0;
+    // openList.push({gValues[start], start}); //without heuristic
     openList.push({gValues[start] + getHeuristic(start, goal), start});
 
     // A* algorithm loop
@@ -1064,6 +1065,7 @@ pair<State, unordered_map<State, State, StateHasher>> astar(
                             parentList[nextState] = currState;
 
                             // Add next state to the open list with its f value
+                            // openList.push({tentGValue, nextState}); // without heuristic
                             openList.push({tentGValue + getHeuristic(nextState, goal), nextState});
                         }
                     }
